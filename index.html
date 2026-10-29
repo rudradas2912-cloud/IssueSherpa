@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IssueSherpa</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a2e; --card:#f4f6fb; --accent:#0069ff; --muted:#667; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1220; --fg:#eef; --card:#1a1e33; --muted:#99a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { margin-bottom: 4px; } .sub { color: var(--muted); margin-top: 0; }
+  section { background: var(--card); border-radius: 12px; padding: 16px; margin: 18px 0; }
+  input, select, button { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #8884; background: var(--bg); color: var(--fg); }
+  input { width: 100%; margin-bottom: 8px; }
+  button { background: var(--accent); color: #fff; border: 0; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .issue { padding: 10px 0; border-top: 1px solid #8883; }
+  .issue a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .badge { background: var(--accent); color:#fff; border-radius: 999px; padding: 1px 8px; font-size: 12px; margin-right: 6px; }
+  .small { color: var(--muted); font-size: 14px; }
+  pre { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; line-height: 1.5; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🏔️ IssueSherpa</h1>
+  <p class="sub">Find a beginner-friendly Hacktoberfest issue and get an AI plan to fix it. Powered by open-weight Llama on DigitalOcean.</p>
+
+  <section>
+    <h3>1. Find an issue</h3>
+    <select id="lang">
+      <option>python</option><option>javascript</option><option>typescript</option>
+      <option>go</option><option>java</option><option>rust</option>
+    </select>
+    <button id="searchBtn">Search &amp; rank</button>
+    <div id="issues"></div>
+  </section>
+
+  <section>
+    <h3>2. Get a contribution plan</h3>
+    <input id="url" placeholder="https://github.com/owner/repo/issues/123">
+    <button id="planBtn">Make plan</button>
+    <p id="status" class="small"></p>
+    <pre id="plan"></pre>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+$("searchBtn").onclick = async () => {
+  const btn = $("searchBtn"); btn.disabled = true; btn.textContent = "Searching...";
+  $("issues").textContent = "";
+  try {
+    const { issues } = await api("/api/search?language=" + $("lang").value);
+    if (!issues.length) $("issues").textContent = "No issues found. Try another language.";
+    issues.forEach(i => {
+      const d = document.createElement("div"); d.className = "issue";
+      const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = i.score || "-";
+      const a = document.createElement("a"); a.href = i.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = i.title;
+      const meta = document.createElement("div"); meta.className = "small"; meta.textContent = i.repo + (i.why ? " · " + i.why : "");
+      const use = document.createElement("button"); use.textContent = "Plan this"; use.style.marginTop = "6px";
+      use.onclick = () => { $("url").value = i.url; $("planBtn").click(); };
+      d.append(badge, a, meta, use); $("issues").append(d);
+    });
+  } catch (e) { $("issues").textContent = "Error: " + e.message; }
+  btn.disabled = false; btn.textContent = "Search & rank";
+};
+
+$("planBtn").onclick = async () => {
+  const btn = $("planBtn"); btn.disabled = true;
+  $("plan").textContent = ""; $("status").textContent = "Agent is reading the repo and thinking... (10-30s)";
+  try {
+    const data = await api("/api/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: $("url").value.trim() })
+    });
+    $("status").textContent = data.files.length ? "Files read: " + data.files.join(", ") : "";
+    $("plan").textContent = data.plan;
+  } catch (e) { $("status").textContent = "Error: " + e.message; }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>
